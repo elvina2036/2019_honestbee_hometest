@@ -6,8 +6,8 @@ import (
 	"bufio"
 	"fmt"
 	"net"
-	"net/http"
 	"strings"
+	"time"
 )
 
 const (
@@ -23,47 +23,50 @@ func main() {
 	}
 	defer ln.Close()
 
-	fmt.Println("Server Start.")
+	fmt.Println("Server On.")
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		go handleConnection(conn)
+		go handleTCPConnection(conn)
 	}
 }
 
-func handleConnection(conn net.Conn) {
+func handleTCPConnection(conn net.Conn) {
 	fmt.Printf("Connecting to %s\n", conn.RemoteAddr().String())
+	rate := time.Second / api.MaxRequestRate // handle 30 tx per second
+	requestsCh := make(chan *api.Request, 1000)
+	handler := &api.RequestHandler{Rate: rate, Requests: requestsCh}
 	for {
 		netData, err := bufio.NewReader(conn).ReadString('\n')
 		if err != nil {
 			fmt.Println(err)
-			return
+			break
 		}
 
-		//cmd := strings.TrimSpace(string(netData))
-		cmd := string(netData)
+		cmd := strings.TrimSuffix(string(netData), "\n")
 		s := strings.Split(cmd, " ")
 		if strings.Compare(s[0], command.CmdtypeStr[command.CMDSTOP]) == 0 {
 			break
 		}
 
 		// dealing command
-		res := handleCmd(cmd)
-		conn.Write([]byte(res + "\n"))
+		go handleCmd(cmd, &conn, handler)
 	}
+	fmt.Printf("%s disconnect.\n", conn.RemoteAddr().String())
 	conn.Close()
 }
 
-func handleCmd(cmd string) string {
+func handleCmd(cmd string, conn *net.Conn, h *api.RequestHandler) {
 	// input: weather Taipei\n
 	cmd = strings.TrimSuffix(cmd, "\n")
 	s := strings.Split(cmd, " ")
 	cmdtype := command.GetCmdType(s[0])
 	if cmdtype < 0 {
-		return txtErrCmds
+		(*conn).Write([]byte(txtErrCmds + "\n"))
+		return
 	}
 	var para []string
 	slen := len(s)
@@ -75,33 +78,7 @@ func handleCmd(cmd string) string {
 		}
 	}
 
-	return connExternalAPI(cmdtype, para)
-}
-
-func connExternalAPI(cmdtype int, para []string) string {
-	reqstruct := api.Request{URL: api.GetURL(cmdtype), PARA: para}
-	requestjson := api.EncodeReq(reqstruct)
-
-	req, err := http.NewRequest("GET", string(requestjson), nil)
-	//resp, err := http.Get(string(requestjson))
-	if err != nil {
-		fmt.Println(err)
-		return ""
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-
-	if err != nil {
-		fmt.Println(err)
-		return ""
-	}
-
-	defer resp.Body.Close()
-
-	//var fixedresp api.WeatherMain = api.WeatherMain(api.DecodeRes(resp.Body, cmdtype))
-	fixedresp := api.DecodeWeather(resp.Body)
-
-	fmt.Println(fixedresp.Main.Temp)
-	return string(fixedresp.Main.Temp)
+	h.Requests <- &api.Request{Cmdtype: cmdtype, Para: para}
+	go h.ProcessRequests(conn)
+	return
 }

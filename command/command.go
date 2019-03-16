@@ -12,6 +12,8 @@ const (
 	CMDSTOP = iota
 	// CMDWeather : request the weather of a certain city
 	CMDWeather
+	// CMDMockAPI : a Mock API
+	CMDMockAPI
 	// CMDEND : end of cmd type
 	CMDEND
 )
@@ -20,10 +22,12 @@ const (
 var CmdtypeStr = [...]string{
 	"quit",
 	"weather",
+	"mockapi",
 }
 var commands = map[string]int{
 	CmdtypeStr[0]: 0,
 	CmdtypeStr[1]: 1,
+	CmdtypeStr[2]: 2,
 }
 
 // GetCmdType turns string into int
