@@ -1,4 +1,4 @@
-# 2019_honestbee_hometest
+# TCP-Server
 
 This is a TCP Sever dealing with a weather API (OpenWeatherMap) and a mock API.
 
