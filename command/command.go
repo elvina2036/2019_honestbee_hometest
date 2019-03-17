@@ -23,6 +23,7 @@ var CmdtypeStr = [...]string{
 	"quit",
 	"weather",
 	"mockapi",
+	"getdata",
 }
 var commands = map[string]int{
 	CmdtypeStr[0]: 0,

@@ -84,7 +84,6 @@ func (r *RequestHandler) ProcessRequests(conn *net.Conn) {
 	for req := range r.Requests {
 		<-throttle
 		go r.connExternalAPI(*req, conn)
-		//(*conn).Write([]byte(result + "\n"))
 	}
 }
 

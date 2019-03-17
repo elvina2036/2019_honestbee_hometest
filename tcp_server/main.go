@@ -14,8 +14,20 @@ const (
 	txtErrCmds = "Unavailable Commands.\n"
 )
 
+var connectioncnt int
+var processedreqcnt int
+
+// limiter
+var requestsCh = make(chan *api.Request, 1000)
+var rate = time.Second / api.MaxRequestRate // handle 30 tx per second
+var handler = &api.RequestHandler{Rate: rate, Requests: requestsCh}
+
 func main() {
-	// TODO ** Optional PORT
+	handleHTTPListener()
+	handleTCPListener()
+}
+
+func handleTCPListener() {
 	ln, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		fmt.Println(err)
@@ -23,7 +35,7 @@ func main() {
 	}
 	defer ln.Close()
 
-	fmt.Println("Server On.")
+	fmt.Println("TCP Server On.")
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -36,9 +48,7 @@ func main() {
 
 func handleTCPConnection(conn net.Conn) {
 	fmt.Printf("Connecting to %s\n", conn.RemoteAddr().String())
-	rate := time.Second / api.MaxRequestRate // handle 30 tx per second
-	requestsCh := make(chan *api.Request, 1000)
-	handler := &api.RequestHandler{Rate: rate, Requests: requestsCh}
+	connectioncnt++
 	for {
 		netData, err := bufio.NewReader(conn).ReadString('\n')
 		if err != nil {
@@ -53,13 +63,14 @@ func handleTCPConnection(conn net.Conn) {
 		}
 
 		// dealing command
-		go handleCmd(cmd, &conn, handler)
+		go handleCmd(cmd, &conn)
 	}
 	fmt.Printf("%s disconnect.\n", conn.RemoteAddr().String())
 	conn.Close()
+	connectioncnt--
 }
 
-func handleCmd(cmd string, conn *net.Conn, h *api.RequestHandler) {
+func handleCmd(cmd string, conn *net.Conn) {
 	// input: weather Taipei\n
 	cmd = strings.TrimSuffix(cmd, "\n")
 	s := strings.Split(cmd, " ")
@@ -78,7 +89,8 @@ func handleCmd(cmd string, conn *net.Conn, h *api.RequestHandler) {
 		}
 	}
 
-	h.Requests <- &api.Request{Cmdtype: cmdtype, Para: para}
-	go h.ProcessRequests(conn)
+	handler.Requests <- &api.Request{Cmdtype: cmdtype, Para: para}
+	processedreqcnt++
+	go handler.ProcessRequests(conn)
 	return
 }

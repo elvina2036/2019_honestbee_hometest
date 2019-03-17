@@ -1,1 +1,0 @@
-go run ./tcp_server/main.go
